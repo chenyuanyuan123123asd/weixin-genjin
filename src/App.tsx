@@ -25,9 +25,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// 初始化 AI
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 interface Customer {
   id: string;
   contact: string;
@@ -109,6 +106,12 @@ export default function App() {
   };
 
   const handleScreenScan = async () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      setScanError("未检测到 AI 密钥。请确保在环境设置中配置了 GEMINI_API_KEY。");
+      return;
+    }
+
     setIsScanning(true);
     setScanError(null);
     let stream: MediaStream | null = null;
@@ -125,6 +128,7 @@ export default function App() {
       ctx?.drawImage(video, 0, 0);
       const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
+      const ai = new GoogleGenAI({ apiKey });
       const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
       const response = await model.generateContent({
         contents: [
