@@ -76,6 +76,18 @@ export default function App() {
     setIsImporting(false);
   };
 
+  const deleteCustomer = (id: string) => {
+    setCustomers(prev => prev.filter(c => c.id !== id));
+    if (activeId === id) setActiveId(null);
+  };
+
+  const clearAll = () => {
+    if (window.confirm("确定要清空所有联系人资料吗？此操作不可撤销。")) {
+      setCustomers([]);
+      setActiveId(null);
+    }
+  };
+
   const updateStatus = (id: string, status: string) => {
     setCustomers(prev => prev.map(c => 
       c.id === id ? { ...c, status, updatedAt: Date.now(), completed: !!status } : c
@@ -129,20 +141,20 @@ export default function App() {
       const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
       const ai = new GoogleGenAI({ apiKey });
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const response = await model.generateContent({
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
         contents: [
           { role: "user", parts: [
             { inlineData: { mimeType: "image/jpeg", data: base64Data } },
             { text: "Identify the current WeChat contact/customer name and their latest message or follow-up summary. Return as JSON: { \"contact\": string, \"status\": string }. Return ONLY JSON." }
           ]}
         ],
-        generationConfig: {
+        config: {
           responseMimeType: "application/json",
         }
       });
 
-      const result = JSON.parse(response.response.text());
+      const result = JSON.parse(response.text || '{}');
       if (result && result.contact) {
         const existing = customers.find(c => c.contact === result.contact);
         if (existing) {
@@ -193,6 +205,23 @@ export default function App() {
           </div>
           <div className="flex gap-2">
             <button 
+              onClick={async () => {
+                const results = customers.map(c => c.status || "").join("\n");
+                await navigator.clipboard.writeText(results);
+                setLastCopied("all");
+                setTimeout(() => setLastCopied(null), 2000);
+              }}
+              className="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold active:scale-95 transition-all outline-none"
+            >
+              复制所有状态
+            </button>
+            <button 
+              onClick={clearAll}
+              className="px-4 py-2 border border-rose-200 bg-rose-50 text-rose-600 rounded-lg text-sm font-bold active:scale-95 transition-all outline-none"
+            >
+              清空名单
+            </button>
+            <button 
               onClick={handleScreenScan} 
               disabled={isScanning} 
               className="group relative flex gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold disabled:opacity-50 transition-all active:scale-95"
@@ -242,6 +271,7 @@ export default function App() {
                 <th className="px-6 py-4 text-[10px] uppercase font-black text-zinc-400 w-16">✔</th>
                 <th className="px-6 py-4 text-[10px] uppercase font-black text-zinc-400">联系人 (点我要复制)</th>
                 <th className="px-6 py-4 text-[10px] uppercase font-black text-zinc-400">最新情况 (填完敲回车)</th>
+                <th className="px-6 py-4 text-[10px] uppercase font-black text-zinc-400 w-16 text-center">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
@@ -269,6 +299,15 @@ export default function App() {
                       onKeyDown={e => e.key === 'Enter' && handleNext(customer.id)}
                       onFocus={() => setActiveId(customer.id)}
                     />
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button 
+                      onClick={() => deleteCustomer(customer.id)}
+                      className="text-zinc-300 hover:text-rose-500 transition-colors p-1"
+                      title="删除此行"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -302,7 +341,7 @@ export default function App() {
       <AnimatePresence>
         {lastCopied && (
           <motion.div initial={{ opacity: 0, y: 20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: 20, x: '-50%' }} className="fixed bottom-6 left-1/2 bg-zinc-900 text-white px-6 py-3 rounded-2xl shadow-xl z-[200] font-bold text-sm">
-            已成功复制：{customers.find(c => c.id === lastCopied)?.contact}
+            {lastCopied === 'all' ? '✅ 已成功复制所有状态（按行排列）' : `已成功复制：${customers.find(c => c.id === lastCopied)?.contact}`}
           </motion.div>
         )}
       </AnimatePresence>
