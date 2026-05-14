@@ -183,14 +183,21 @@ export default function App() {
               <Zap size={22} fill="currentColor" />
             </div>
             <div>
-              <h1 className="font-bold text-lg text-zinc-800">微信跟进助手</h1>
+              <h1 className="font-bold text-lg text-zinc-800 uppercase tracking-tighter">weixin-genjin</h1>
               <p className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">Auto Follow-up Engine</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleScreenScan} disabled={isScanning} className="flex gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold disabled:opacity-50 transition-all active:scale-95">
+            <button 
+              onClick={handleScreenScan} 
+              disabled={isScanning} 
+              className="group relative flex gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold disabled:opacity-50 transition-all active:scale-95"
+            >
               {isScanning ? <Loader2 size={16} className="animate-spin" /> : <Scan size={16} />} 
               AI 扫屏识别
+              <div className="absolute top-full right-0 mt-2 w-48 p-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity font-normal">
+                提示：点我后请在弹出框的“窗口”标签里选中“微信”。若黑屏请检查系统权限。
+              </div>
             </button>
             <button onClick={() => setIsImporting(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all">导入名单</button>
           </div>
