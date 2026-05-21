@@ -4,24 +4,13 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { 
   Search, 
-  Download, 
   Trash2, 
   CheckCircle2, 
-  Clock, 
-  FileUp, 
-  Users,
   Copy,
   Zap,
-  MousePointer2,
-  Keyboard,
-  ArrowRight,
-  Save,
-  Scan,
-  Loader2,
-  AlertCircle
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -39,15 +28,27 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [isImporting, setIsImporting] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
   const [importText, setImportText] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [lastCopied, setLastCopied] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
+  const [showFloatingStats, setShowFloatingStats] = useState(false);
   
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // 监听滚动，展示左边浮窗
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 150) {
+        setShowFloatingStats(true);
+      } else {
+        setShowFloatingStats(false);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // 自动保存
   useEffect(() => {
@@ -108,69 +109,17 @@ export default function App() {
     }
   };
 
-  const handleNext = (currentId: string) => {
+  // 敲击回车时：即使空白也视为已处理（完成），然后跳到下一个待办
+  const submitAndNext = (currentId: string) => {
+    setCustomers(prev => prev.map(c => 
+      c.id === currentId ? { ...c, completed: true } : c
+    ));
+
     const currentIndex = filteredCustomers.findIndex(c => c.id === currentId);
     const nextPending = filteredCustomers.slice(currentIndex + 1).find(c => !c.completed);
     if (nextPending) {
       copyAndFocus(nextPending.contact, nextPending.id);
       inputRefs.current[nextPending.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const handleScreenScan = async () => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      setScanError("未检测到 AI 密钥。请确保在环境设置中配置了 GEMINI_API_KEY。");
-      return;
-    }
-
-    setIsScanning(true);
-    setScanError(null);
-    let stream: MediaStream | null = null;
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(video, 0, 0);
-      const base64Data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: [
-          { role: "user", parts: [
-            { inlineData: { mimeType: "image/jpeg", data: base64Data } },
-            { text: "Identify the current WeChat contact/customer name and their latest message or follow-up summary. Return as JSON: { \"contact\": string, \"status\": string }. Return ONLY JSON." }
-          ]}
-        ],
-        config: {
-          responseMimeType: "application/json",
-        }
-      });
-
-      const result = JSON.parse(response.text || '{}');
-      if (result && result.contact) {
-        const existing = customers.find(c => c.contact === result.contact);
-        if (existing) {
-          updateStatus(existing.id, result.status);
-          setActiveId(existing.id);
-        } else {
-          setCustomers([{ id: Math.random().toString(36).substring(2), contact: result.contact, status: result.status, updatedAt: Date.now(), completed: true }, ...customers]);
-        }
-      } else {
-        setScanError("未识别到联系人，请确保微信窗口清晰可见。");
-      }
-    } catch (err: any) {
-      if (err.name !== 'NotAllowedError') setScanError("识别出错: " + err.message);
-    } finally {
-      stream?.getTracks().forEach(t => t.stop());
-      setIsScanning(false);
     }
   };
 
@@ -221,21 +170,59 @@ export default function App() {
             >
               清空名单
             </button>
-            <button 
-              onClick={handleScreenScan} 
-              disabled={isScanning} 
-              className="group relative flex gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold disabled:opacity-50 transition-all active:scale-95"
-            >
-              {isScanning ? <Loader2 size={16} className="animate-spin" /> : <Scan size={16} />} 
-              AI 扫屏识别
-              <div className="absolute top-full right-0 mt-2 w-48 p-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity font-normal">
-                提示：点我后请在弹出框的“窗口”标签里选中“微信”。若黑屏请检查系统权限。
-              </div>
-            </button>
             <button onClick={() => setIsImporting(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-200 active:scale-95 transition-all">导入名单</button>
           </div>
         </div>
       </nav>
+
+      {/* 滚动时生成的左侧悬浮窗 */}
+      <AnimatePresence>
+        {showFloatingStats && (
+          <motion.div 
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }}
+            className="fixed left-4 top-24 z-40 w-44 bg-white/95 backdrop-blur-md border border-zinc-200 rounded-2xl p-4 shadow-xl hidden lg:flex flex-col gap-3"
+          >
+            <div className="border-b border-zinc-100 pb-1.5">
+              <h4 className="font-bold text-[11px] text-zinc-400 uppercase tracking-wider">跟进简报</h4>
+            </div>
+            <div className="space-y-2 text-xs font-bold">
+              <div className="flex justify-between items-center bg-zinc-50 p-2 rounded-lg text-zinc-700">
+                <span className="text-zinc-500 font-normal">总客户数</span>
+                <span className="font-mono text-zinc-950">{customers.length}</span>
+              </div>
+              <div className="flex justify-between items-center bg-emerald-50 text-emerald-800 p-2 rounded-lg">
+                <span className="font-normal text-emerald-600">已处理</span>
+                <span className="font-mono">{customers.filter(c => c.completed).length}</span>
+              </div>
+              <div className="flex justify-between items-center bg-amber-50 text-amber-800 p-2 rounded-lg">
+                <span className="font-normal text-amber-600">待跟进</span>
+                <span className="font-mono">{customers.filter(c => !c.completed).length}</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 mt-1 pt-2 border-t border-zinc-100">
+              <button 
+                onClick={async () => {
+                  const results = customers.map(c => c.status || "").join("\n");
+                  await navigator.clipboard.writeText(results);
+                  setLastCopied("all");
+                  setTimeout(() => setLastCopied(null), 2000);
+                }}
+                className="w-full text-center py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold transition-all"
+              >
+                复制状态列表
+              </button>
+              <button 
+                onClick={clearAll}
+                className="w-full text-center py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-bold transition-all"
+              >
+                清空名单
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
@@ -261,8 +248,6 @@ export default function App() {
             <input type="text" placeholder="搜索联系人..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-zinc-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"/>
           </div>
         </div>
-
-        <AnimatePresence>{scanError && <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-4 bg-rose-50 text-rose-600 rounded-2xl text-sm border border-rose-100 flex items-center justify-between"><span>{scanError}</span><button onClick={() => setScanError(null)} className="font-bold px-2">×</button></motion.div>}</AnimatePresence>
 
         <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden min-h-[400px]">
           <table className="w-full text-left">
@@ -296,7 +281,7 @@ export default function App() {
                       placeholder="等待填写..."
                       value={customer.status}
                       onChange={e => updateStatus(customer.id, e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleNext(customer.id)}
+                      onKeyDown={e => e.key === 'Enter' && submitAndNext(customer.id)}
                       onFocus={() => setActiveId(customer.id)}
                     />
                   </td>
